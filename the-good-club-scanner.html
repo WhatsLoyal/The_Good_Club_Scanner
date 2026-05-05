@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<title>The Good Club · Scanner</title>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  height: 100%;
+  background: #000;
+  color: white;
+  font-family: -apple-system, sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+#app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Header */
+.header {
+  background: #B8D43A;
+  color: #000;
+  padding: 12px 16px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.header small {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.7;
+  margin-top: 2px;
+  letter-spacing: 0.5px;
+}
+
+/* Camera area */
+.camera-wrap {
+  flex: 1;
+  position: relative;
+  background: #000;
+  overflow: hidden;
+}
+
+video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+canvas { display: none; }
+
+/* Scanner overlay */
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scan-box {
+  width: 65%;
+  max-width: 280px;
+  aspect-ratio: 1;
+  border: 3px solid #B8D43A;
+  border-radius: 12px;
+  position: relative;
+  box-shadow: 0 0 0 2000px rgba(0,0,0,0.4);
+}
+
+.scan-box::before,
+.scan-box::after,
+.scan-box .corner-bl,
+.scan-box .corner-br {
+  content: '';
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border: 4px solid #B8D43A;
+}
+
+.scan-box::before {
+  top: -3px; left: -3px;
+  border-right: none; border-bottom: none;
+}
+.scan-box::after {
+  top: -3px; right: -3px;
+  border-left: none; border-bottom: none;
+}
+.scan-box .corner-bl {
+  bottom: -3px; left: -3px;
+  border-right: none; border-top: none;
+}
+.scan-box .corner-br {
+  bottom: -3px; right: -3px;
+  border-left: none; border-top: none;
+}
+
+.hint {
+  position: absolute;
+  bottom: 60px;
+  left: 0; right: 0;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+  letter-spacing: 0.5px;
+}
+
+/* Result screen */
+.result {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.result.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.result.green { background: #16a34a; }
+.result.red { background: #dc2626; }
+.result.gray { background: #4b5563; }
+
+.result-emoji {
+  font-size: 80px;
+  margin-bottom: 16px;
+  line-height: 1;
+}
+
+.result-name {
+  font-size: 36px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.result-status {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.result-detail {
+  font-size: 16px;
+  background: rgba(0,0,0,0.25);
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  max-width: 320px;
+}
+
+.result-id {
+  position: absolute;
+  bottom: 16px;
+  left: 0; right: 0;
+  font-size: 11px;
+  font-family: monospace;
+  opacity: 0.6;
+  word-break: break-all;
+  padding: 0 24px;
+}
+
+/* Bottom bar */
+.bottom-bar {
+  background: #1a1a1a;
+  padding: 10px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-family: monospace;
+  letter-spacing: 0.5px;
+  color: rgba(255,255,255,0.6);
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #16a34a;
+  margin-right: 6px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Permission screen */
+.permission {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  text-align: center;
+  z-index: 200;
+}
+
+.permission h2 {
+  color: #B8D43A;
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.permission p {
+  color: white;
+  font-size: 16px;
+  margin-bottom: 32px;
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+.btn {
+  background: #B8D43A;
+  color: #000;
+  border: none;
+  padding: 16px 32px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn:active { transform: scale(0.97); }
+
+.error {
+  background: #dc2626;
+  color: white;
+  padding: 12px 16px;
+  margin: 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Test mode panel */
+.test-panel {
+  position: absolute;
+  top: 60px;
+  right: 12px;
+  background: rgba(0,0,0,0.85);
+  border: 1px solid #B8D43A;
+  border-radius: 8px;
+  padding: 8px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.test-panel button {
+  background: #B8D43A;
+  color: #000;
+  border: none;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  text-transform: uppercase;
+}
+
+.test-panel button.red { background: #dc2626; color: white; }
+.test-panel button.gray { background: #6b7280; color: white; }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- Permission screen -->
+  <div class="permission" id="permissionScreen">
+    <h2>The Good Club</h2>
+    <p>Scanner de barra · TGB Antiguo<br>Necesitamos acceso a la cámara para leer los QR de los clientes.</p>
+    <button class="btn" onclick="startCamera()">Activar cámara</button>
+    <div id="errorMsg"></div>
+  </div>
+
+  <!-- Header -->
+  <div class="header" id="header" style="display:none;">
+    THE GOOD CLUB · SCANNER
+    <small>TGB ANTIGUO</small>
+  </div>
+
+  <!-- Camera + scanner -->
+  <div class="camera-wrap" id="cameraWrap" style="display:none;">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+
+    <div class="overlay">
+      <div class="scan-box">
+        <span class="corner-bl"></span>
+        <span class="corner-br"></span>
+      </div>
+    </div>
+
+    <div class="hint" id="hint">Apunta al QR del cliente</div>
+
+    <!-- Test panel -->
+    <div class="test-panel">
+      <button onclick="simulateRead('green')">🟢 Test verde</button>
+      <button class="red" onclick="simulateRead('red')">🔴 Test rojo</button>
+      <button class="gray" onclick="simulateRead('gray')">⚪ Test gris</button>
+    </div>
+
+    <!-- Result overlay -->
+    <div class="result" id="result">
+      <div class="result-emoji" id="resultEmoji">✅</div>
+      <div class="result-name" id="resultName">MAITE</div>
+      <div class="result-status" id="resultStatus">Visita 3/5</div>
+      <div class="result-detail" id="resultDetail">+1 papeleta del mes</div>
+      <div class="result-id" id="resultId"></div>
+    </div>
+  </div>
+
+  <!-- Bottom bar -->
+  <div class="bottom-bar" id="bottomBar" style="display:none;">
+    <div><span class="status-dot"></span>SCANNING</div>
+    <div id="counter">Lecturas: 0</div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// THE GOOD CLUB · SCANNER · v0.1 (test mode)
+// Webhook real se conectará en versión 0.2
+// ============================================================
+
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d', { willReadFrequently: true });
+const result = document.getElementById('result');
+const counterEl = document.getElementById('counter');
+
+let stream = null;
+let scanning = false;
+let lastReadTime = 0;
+let lastReadCode = '';
+let readCount = 0;
+
+// === SOUNDS (generated with Web Audio API to avoid file dependencies) ===
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function beep(freq, duration, type = 'sine') {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.frequency.value = freq;
+  osc.type = type;
+  gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+  osc.start();
+  osc.stop(audioCtx.currentTime + duration);
+}
+
+function soundGreen() {
+  beep(880, 0.15);
+  setTimeout(() => beep(1320, 0.15), 100);
+}
+
+function soundRed() {
+  beep(660, 0.2);
+  setTimeout(() => beep(440, 0.2), 200);
+  setTimeout(() => beep(660, 0.3), 400);
+}
+
+function soundGray() {
+  beep(220, 0.3, 'square');
+}
+
+// === START CAMERA ===
+async function startCamera() {
+  const errorEl = document.getElementById('errorMsg');
+  errorEl.innerHTML = '';
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: 'environment',
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    });
+    video.srcObject = stream;
+    await video.play();
+
+    document.getElementById('permissionScreen').style.display = 'none';
+    document.getElementById('header').style.display = 'block';
+    document.getElementById('cameraWrap').style.display = 'block';
+    document.getElementById('bottomBar').style.display = 'flex';
+
+    scanning = true;
+    requestAnimationFrame(scanLoop);
+
+  } catch (err) {
+    console.error(err);
+    errorEl.innerHTML = `<div class="error">Error: ${err.message}<br>Asegúrate de dar permisos de cámara.</div>`;
+  }
+}
+
+// === SCAN LOOP ===
+function scanLoop() {
+  if (!scanning) return;
+
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: 'dontInvert'
+    });
+
+    if (code && code.data) {
+      handleQR(code.data);
+    }
+  }
+
+  requestAnimationFrame(scanLoop);
+}
+
+// === HANDLE QR DETECTED ===
+function handleQR(data) {
+  const now = Date.now();
+
+  // Anti-double-read: ignore same code if scanned in last 4 seconds
+  if (data === lastReadCode && (now - lastReadTime) < 4000) {
+    return;
+  }
+
+  // Anti-spam: ignore any read in last 1.5s after a result
+  if ((now - lastReadTime) < 1500) {
+    return;
+  }
+
+  lastReadCode = data;
+  lastReadTime = now;
+  readCount++;
+  counterEl.textContent = `Lecturas: ${readCount}`;
+
+  // === TEST MODE: simulate response based on QR content ===
+  // En versión 0.2 esto se reemplaza con fetch a webhook de Make
+  processQR(data);
+}
+
+// === PROCESS QR (test mode) ===
+function processQR(data) {
+  // Simulación: alterna respuestas según el contenido del QR
+  // En la versión real, esto será un fetch al webhook de Make.com
+  
+  let mode;
+  if (data.toLowerCase().includes('premio') || data.toLowerCase().includes('red')) {
+    mode = 'red';
+  } else if (data.toLowerCase().includes('nuevo') || data.toLowerCase().includes('gray')) {
+    mode = 'gray';
+  } else {
+    mode = 'green';
+  }
+
+  showResult(mode, data);
+}
+
+// === SHOW RESULT ===
+function showResult(mode, qrData = '') {
+  const emoji = document.getElementById('resultEmoji');
+  const name = document.getElementById('resultName');
+  const status = document.getElementById('resultStatus');
+  const detail = document.getElementById('resultDetail');
+  const id = document.getElementById('resultId');
+
+  // Test data
+  const testNames = ['MAITE', 'AITOR', 'NEREA', 'JON', 'IRATI'];
+  const randomName = testNames[Math.floor(Math.random() * testNames.length)];
+  const randomVisit = Math.floor(Math.random() * 5) + 1;
+
+  result.className = 'result show ' + mode;
+
+  if (mode === 'green') {
+    emoji.textContent = '✅';
+    name.textContent = randomName;
+    status.textContent = `Visita ${randomVisit}/5`;
+    detail.textContent = '+1 papeleta · Vas el 3º del mes';
+    soundGreen();
+  } else if (mode === 'red') {
+    emoji.textContent = '🍔';
+    name.textContent = randomName;
+    status.textContent = 'BURGER GRATIS';
+    detail.textContent = 'Aplica descuento 100% en Codysis';
+    soundRed();
+  } else {
+    emoji.textContent = '⚪';
+    name.textContent = 'No reconocido';
+    status.textContent = 'QR no válido';
+    detail.textContent = 'Invítale al cartel de la mesa';
+    soundGray();
+  }
+
+  id.textContent = qrData ? `QR: ${qrData.substring(0, 60)}` : '';
+
+  // Hide result after 3 seconds
+  setTimeout(() => {
+    result.classList.remove('show');
+  }, 3000);
+}
+
+// === TEST BUTTONS (manual simulation) ===
+function simulateRead(mode) {
+  readCount++;
+  counterEl.textContent = `Lecturas: ${readCount}`;
+  showResult(mode, 'TEST_MANUAL');
+}
+
+// === KEEP SCREEN ALIVE (Wake Lock API) ===
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      await navigator.wakeLock.request('screen');
+    }
+  } catch (err) {
+    console.log('Wake lock not available');
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') requestWakeLock();
+});
+
+// === FULLSCREEN ON FIRST TAP ===
+document.addEventListener('click', () => {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}, { once: true });
+</script>
+
+</body>
+</html>
